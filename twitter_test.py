@@ -127,7 +127,7 @@ class Client():
     # In reality better to load more twits when previous pack was read e.g "load more twits"
 
     # Gets all twits in chronological order (twits are ordered by timestamp e.g clustering key)
-    def getTwits(self, username, /, getAmount = False, amount = 1):
+    def getTwits(self, username, lastYear, /, getAmount = False, amount = 1):
         userId = self.getUserId(username)
 
         currentYear = datetime.date.today().year
@@ -139,11 +139,7 @@ class Client():
             twitIdRows = self.twitsSession.execute(f"SELECT * FROM {self.twitsTables[1]} WHERE authorId={userId} AND year={currentYear};")
             # Get twits from previous year if current is empty
             if twitIdRows == None:
-                if changedYear:
-                    exitLoop = True
-                else:
-                    currentYear -= 1
-                    changedYear = True
+                currentYear -= 1
             else:
                 for row in twitIdRows:
                     if amount == 0 and getAmount:
@@ -151,7 +147,8 @@ class Client():
                     twitIds.append(row.twitid)
                     amount -= 1
             changedYear = False
-            if amount == 0 and getAmount:
+
+            if (amount == 0 and getAmount) or (currentYear < lastYear):
                 exitLoop = True
 
         messages = []
@@ -169,12 +166,13 @@ client = Client()
 # Example 1
 # Get twits from user
 username = "ANAAISLEC"
-messages = client.getTwits(username, getAmount=True, amount=100)
+messages = client.getTwits(username, 2015, getAmount=True, amount=100)
 for msg in messages:
     print(f"@{username}: {msg}")
     print("=" * 50)
 
 # Example 2
 # Fill twits from normalized file (only username and message rows)
-filePath = "some/path/example.txt"
-client.fillTwits(filePath)
+#
+# filePath = "some/path/example.txt"
+# client.fillTwits(filePath)
