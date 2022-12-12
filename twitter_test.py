@@ -28,7 +28,11 @@ class Client():
         # Variables
         self.userKeyspace = "users"
         self.userTable = "user"
+        self.userFollowerTable = "userfollower"
+
         self.userRedisHash = "twitterUsers"
+        self.followerRedisHash = "userFollowers"
+        self.followingRedisHash = "userFollowing"
 
         self.twitsKeyspace = "twits"
         self.twitsTables = ["twit", "userTwit"]
@@ -99,6 +103,8 @@ class Client():
                                      f"(id, username, password) VALUES "
                                      f"({userId}, '{username}', '{password}');")
             self.userRedisInstance.hset(self.userRedisHash, username, str(userId))
+            self.userRedisInstance.hset(self.followerRedisHash, userId, 0)
+            self.userRedisInstance.hset(self.followingRedisHash, userId, 0)
             return True
         else:
             return False
@@ -161,18 +167,71 @@ class Client():
         del twitIds
 
         return messages
+    
+    def followUser(self, username, followerUsername):
+        userId = self.getUserId(username)
+        followerId = self.getUserId(followerUsername)
+        if userId != None and followerId != None:
+            if self.userSession.execute(f"SELECT * FROM {self.userFollowerTable};") == None:
+                self.userSession.execute(f"INSERT INTO {self.userFollowerTable} (userid, followerid) VALUES ({userid}, [{followerId}]);")
+            else:
+                self.userSession.execute(f"UPDATE {self.userFollowerTable} SET followerid = [{followerId}] + followerid WHERE userid = {userId};")
+            currentFollowersCount = self.userRedisInstance.hget(self.followerRedisHash, userId)
+
+            if currentFollowersCount == None:
+                self.userRedisInstance.hset(self.followerRedisHash, userId, "1")
+            else:
+                currentFollowersCount = str(int(currentFollowersCount.decode("utf-8")) + 1)
+                self.userRedisInstance.hset(self.followerRedisHash, userId, currentFollowersCount)
+            
+            followerFollowingCount = self.userRedisInstance.hget(self.followingRedisHash, followerId)
+            if followerFollowingCount == None:
+                followerFollowingCount = 1
+            else:
+                followerFollowingCount = int(followerFollowingCount.decode("utf-8")) + 1
+            self.userRedisInstance.hset(self.followingRedisHash, followerId, followerFollowingCount)
+    
+    def unfollowUser(self, username, followerUsername):
+        userId = self.getUserId(username)
+        followerId = self.getUserId(followerUsername)
+        if userId != None and followerId != None:
+            if self.userSession.execute(f"SELECT * FROM {self.userFollowerTable};") != None:
+                self.userSession.execute(f"UPDATE {self.userFollowerTable} SET followerid = followerid - [{followerId}] WHERE userid = {userId};")
+            currentFollowersCount = self.userRedisInstance.hget(self.followerRedisHash, userId)
+            followerFollowingCount = self.userRedisInstance.hget(self.followingRedisHash, followerId)
+
+            currentFollowersCount = int(currentFollowersCount.decode("utf-8")) - 1
+            followerFollowingCount = int(followerFollowingCount.decode("utf-8")) - 1
+
+            self.userRedisInstance.hset(self.followerRedisHash, userId, currentFollowersCount)
+            self.userRedisInstance.hset(self.followerRedisHash, followerId, followerFollowingCount)
+    def getUserProfile(self, username):
+        # Get userId
+        # Get followers count
+        # Get following count
+        userId = self.getUserId(username)
+        print(f"{username} profile: ")
+        print(f"UserId: {userId}")
+        print(f"Followers: {int(self.userRedisInstance.hget(self.followerRedisHash, userId))}")
+        print(f"Following: {int(self.userRedisInstance.hget(self.followingRedisHash, userId))}")
 
 client = Client()
 # Example 1
 # Get twits from user
 username = "ANAAISLEC"
-messages = client.getTwits(username, 2015, getAmount=True, amount=100)
-for msg in messages:
-    print(f"@{username}: {msg}")
-    print("=" * 50)
+def example1():
+    messages = client.getTwits(username, 2015, getAmount=True, amount=100)
+    for msg in messages:
+        print(f"@{username}: {msg}")
+        print("=" * 50)
 
-# Example 2
-# Fill twits from normalized file (only username and message rows)
-#
-# filePath = "some/path/example.txt"
-# client.fillTwits(filePath)
+def example3():
+    client.followUser(username, "Kayla9932")
+    client.followUser(username, "Michele5334")
+    client.followUser(username, "Amy1906")
+
+#client.followUser("Kayla9932", username)
+def example4():
+    client.getUserProfile("ANAAISLEC")
+
+example4()
